@@ -1,9 +1,11 @@
 package io.pillopl.library.lending.patronprofile.web;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.pillopl.library.catalogue.BookId;
 import io.pillopl.library.lending.LendingTestContext;
 import io.pillopl.library.lending.book.model.BookFixture;
 import io.pillopl.library.lending.patron.application.hold.CancelingHold;
+import io.pillopl.library.lending.patron.application.hold.PlacingOnHold;
 import io.pillopl.library.lending.patron.model.PatronFixture;
 import io.pillopl.library.lending.patron.model.PatronId;
 import io.pillopl.library.lending.patronprofile.model.Checkout;
@@ -19,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.hateoas.MediaTypes;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,6 +39,7 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -60,7 +64,13 @@ public class PatronProfileControllerIT {
     private PatronProfiles patronProfiles;
 
     @MockBean
+    private PlacingOnHold placingOnHold;
+
+    @MockBean
     private CancelingHold cancelingHold;
+
+    @MockBean
+    private MeterRegistry meterRegistry;
 
     @Test
     public void shouldContainPatronProfileResourceWithCorrectHeadersAndLinksToCheckoutsAndHolds() throws Exception {
@@ -70,7 +80,7 @@ public class PatronProfileControllerIT {
         mvc.perform(get("/profiles/" + patronId.getPatronId())
                 .accept(MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(status().isOk())
-                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE + ";charset=UTF-8"))
+                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(jsonPath("$._links.self.href", containsString("profiles/" + patronId.getPatronId())))
                 .andExpect(jsonPath("$.patronId", is(patronId.getPatronId().toString())))
                 .andExpect(jsonPath("$._links.holds.href", containsString("/profiles/" + patronId.getPatronId() + "/holds")))
@@ -85,7 +95,7 @@ public class PatronProfileControllerIT {
         mvc.perform(get("/profiles/" + patronId.getPatronId() + "/holds/")
                 .accept(MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(status().isOk())
-                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE + ";charset=UTF-8"))
+                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(jsonPath("$._embedded.holdList[0].bookId", is(bookId.getBookId().toString())))
                 .andExpect(jsonPath("$._embedded.holdList[0]._links.self.href", containsString("/profiles/" + patronId.getPatronId() + "/holds/" + bookId.getBookId())))
                 .andExpect(jsonPath("$._embedded.holdList[0].till", is(anyDate.toString())))
@@ -100,7 +110,7 @@ public class PatronProfileControllerIT {
         mvc.perform(get("/profiles/" + patronId.getPatronId() + "/checkouts/")
                 .accept(MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(status().isOk())
-                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE + ";charset=UTF-8"))
+                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(jsonPath("$._embedded.checkoutList[0].bookId", is(anotherBook.getBookId().toString())))
                 .andExpect(jsonPath("$._embedded.checkoutList[0].till", is(anotherDate.toString())))
                 .andExpect(jsonPath("$._embedded.checkoutList[0]._links.self.href", containsString("/profiles/" + patronId.getPatronId() + "/checkouts/" + anotherBook.getBookId())));
@@ -135,7 +145,7 @@ public class PatronProfileControllerIT {
         mvc.perform(get("/profiles/" + patronId.getPatronId() + "/holds/" + bookId.getBookId())
                 .accept(MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(status().isOk())
-                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE + ";charset=UTF-8"))
+                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(jsonPath("$.bookId", is(bookId.getBookId().toString())))
                 .andExpect(jsonPath("$.till", is(anyDate.toString())))
                 .andExpect(jsonPath("$._templates.default.method", is("delete")))
@@ -150,10 +160,36 @@ public class PatronProfileControllerIT {
         mvc.perform(get("/profiles/" + patronId.getPatronId() + "/checkouts/" + anotherBook.getBookId())
                 .accept(MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(status().isOk())
-                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE + ";charset=UTF-8"))
+                .andExpect(header().string(CONTENT_TYPE, MediaTypes.HAL_FORMS_JSON_VALUE))
                 .andExpect(jsonPath("$.bookId", is(anotherBook.getBookId().toString())))
                 .andExpect(jsonPath("$.till", is(anotherDate.toString())))
                 .andExpect(jsonPath("$._links.self.href", containsString("profiles/" + patronId.getPatronId() + "/checkouts/" + anotherBook.getBookId())));
+    }
+
+    @Test
+    public void shouldPlaceBookOnHold() throws Exception {
+        given(placingOnHold.placeOnHold(any())).willReturn(Try.success(Success));
+        var request = "{\"bookId\":\"6e1dfec5-5cfe-487e-814e-d70114f5396e\", \"libraryBranchId\":\"a518e2ef-5f6c-43e3-a7fc-5d895e15be3a\",\"numberOfDays\":1}";
+
+        // expect
+        mvc.perform(post("/profiles/" + patronId.getPatronId() + "/holds")
+                .accept(MediaTypes.HAL_FORMS_JSON_VALUE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void shouldReturn500IfSomethingFailedWhileDuringPlacingOnHold() throws Exception {
+        given(placingOnHold.placeOnHold(any())).willReturn(Try.failure(new IllegalArgumentException()));
+        var request = "{\"bookId\":\"6e1dfec5-5cfe-487e-814e-d70114f5396e\", \"libraryBranchId\":\"a518e2ef-5f6c-43e3-a7fc-5d895e15be3a\",\"numberOfDays\":1}";
+
+        // expect
+        mvc.perform(post("/profiles/" + patronId.getPatronId() + "/holds")
+                .accept(MediaTypes.HAL_FORMS_JSON_VALUE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request))
+                .andExpect(status().isInternalServerError());
     }
 
     @Test

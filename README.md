@@ -235,7 +235,7 @@ they are not supposed to perform. A solution to this problem could be the distin
 and integration events, which will be described here soon.  
 
 ### Events in Repositories 
-Repositories are one of the most popoluar design pattern. They abstract our domain model from data layer. 
+Repositories are one of the most popular design pattern. They abstract our domain model from data layer. 
 In other words, they deal with state. That said, a common use-case is when we pass a new state to our repository,
 so that it gets persisted. It may look like so:
 
@@ -257,7 +257,7 @@ This change might be calculated by dirty checking or we might just override enti
 Third option is _Let's make implicit explicit_ and actually call this state change A->B an **event**. 
 After all, event-driven architecture is all about promoting state changes as domain events.
 
-Thanks to this our domain model may become immutable and just return events as results of invocking a command like so:
+Thanks to this our domain model may become immutable and just return events as results of invoking a command like so:
 
 ```java
 public BookPlacedOnHold placeOnHold(AvailableBook book) {
@@ -703,8 +703,8 @@ a look:
         }
     }
     ```
-- As you could se above, we also try not to use component scan wherever possible. Instead we utilize
-`@Configuration` classes where we define module specific beans in the infrastracture layer. Those
+- As you could see above, we also try not to use component scan wherever possible. Instead we utilize
+`@Configuration` classes where we define module specific beans in the infrastructure layer. Those
 configuration classes are explicitly declared in the main application class.
 
 ### Tests
@@ -794,6 +794,22 @@ Either way once built you can run it like so:
 $ docker run -ti --rm --name spring-library -p 8080:8080 spring/library
 ```
 
+### Production ready metrics and visualization
+To run the application as well as Prometheus and Grafana dashboard for visualizing metrics you can run all services:
+
+```console
+$ docker-compose up
+```
+
+If everything goes well, you can access the following services at given location:
+* http://localhost:8080/actuator/prometheus - published Micrometer metrics
+* http://localhost:9090 - Prometheus dashboard
+* http://localhost:3000 - Grafana dashboard
+
+In order to see some metrics, you must create a dashboard. Go to `Create` -> `Import` and select attached `jvm-micrometer_rev8.json`. File has been pulled from 
+`https://grafana.com/grafana/dashboards/4701`.
+
+Please note application will be run with `local` Spring profile to setup some initial data.
 
 ## References
 
